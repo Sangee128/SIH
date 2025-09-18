@@ -1,0 +1,326 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      UserRole @default(DIETITIAN)
+  clinicId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic    Clinic?  @relation(fields: [clinicId], references: [id])
+  patients  Patient[]
+  dietPlans DietPlan[]
+
+  @@map("users")
+}
+
+model Clinic {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  phone       String?
+  email       String?
+  logo        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  patients    Patient[]
+  templates   DietPlanTemplate[]
+
+  @@map("clinics")
+}
+
+model Patient {
+  id               String   @id @default(cuid())
+  name             String
+  email            String?  @unique
+  phone            String?
+  dateOfBirth      DateTime
+  gender           Gender
+  height           Float?   // in cm
+  weight           Float?   // in kg
+  address          String?
+  allergies        String?  // JSON array of allergy strings
+  chronicConditions String?  // JSON array of chronic conditions
+  medications      String?  // JSON array of medications
+  lifestyle        String?  // JSON string with lifestyle info
+  goals            String?  // JSON array of health goals
+  dietitianId      String
+  clinicId         String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  dietitian        User     @relation(fields: [dietitianId], references: [id])
+  clinic           Clinic   @relation(fields: [clinicId], references: [id])
+  prakritiAssessments PrakritiAssessment[]
+  dietPlans        DietPlan[]
+  progressRecords  ProgressRecord[]
+
+  @@map("patients")
+}
+
+model PrakritiAssessment {
+  id          String   @id @default(cuid())
+  patientId   String
+  vataScore   Int      // 0-100
+  pittaScore  Int      // 0-100
+  kaphaScore  Int      // 0-100
+  confidence  Float?   // 0-1
+  responses   String   // JSON string with questionnaire responses
+  notes       String?
+  isManual    Boolean  @default(false)
+  assessedBy  String?  // dietitian ID if manual
+  assessedAt  DateTime @default(now())
+
+  patient     Patient  @relation(fields: [patientId], references: [id])
+
+  @@map("prakriti_assessments")
+}
+
+model FoodItem {
+  id                 String   @id @default(cuid())
+  name               String
+  aliases            String?  // JSON array of alternative names
+  servingSize        String   // e.g., "1 tsp (5g)"
+  calories           Float?
+  protein            Float?   // in grams
+  fat                Float?   // in grams
+  carbs              Float?   // in grams
+  fiber              Float?   // in grams
+  vataEffect         DoshaEffect
+  pittaEffect        DoshaEffect
+  kaphaEffect        DoshaEffect
+  taste              String?  // JSON array of tastes
+  quality            String?  // JSON array of qualities
+  potency            Virya    // heating/cooling
+  postDigestiveEffect Vipaka  // sweet/sour/pungent/astringent/bitter
+  seasonality        String?  // JSON array of seasons
+  preparation        String?  // JSON array of preparation methods
+  contraindications  String?  // JSON array of contraindications
+  vernacularNames    String?  // JSON object with language codes as keys
+  source             String   // "IFCT", "USDA", "CUSTOM"
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  recipeIngredients  RecipeIngredient[]
+  mealFoods          MealFood[]
+
+  @@map("food_items")
+}
+
+model DietPlan {
+  id          String   @id @default(cuid())
+  patientId   String
+  dietitianId String
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  status      PlanStatus @default(DRAFT)
+  notes       String?
+  rationale   String?   // JSON string with Ayurvedic rationale
+  approvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  dietitian   User     @relation(fields: [dietitianId], references: [id])
+  meals       Meal[]
+  versions    DietPlanVersion[]
+
+  @@map("diet_plans")
+}
+
+model Meal {
+  id          String   @id @default(cuid())
+  dietPlanId  String
+  name        String   // breakfast, lunch, dinner, snack
+  time        String?  // suggested time
+  notes       String?
+  foods       MealFood[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dietPlan    DietPlan @relation(fields: [dietPlanId], references: [id])
+
+  @@map("meals")
+}
+
+model MealFood {
+  id          String   @id @default(cuid())
+  mealId      String
+  foodItemId  String
+  quantity    String   // e.g., "1 cup", "100g"
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  meal        Meal     @relation(fields: [mealId], references: [id])
+  foodItem    FoodItem @relation(fields: [foodItemId], references: [id])
+
+  @@map("meal_foods")
+}
+
+model Recipe {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  instructions String  // JSON array of steps
+  prepTime    Int?     // in minutes
+  cookTime    Int?     // in minutes
+  servings    Int      @default(1)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ingredients RecipeIngredient[]
+
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id          String   @id @default(cuid())
+  recipeId    String
+  foodItemId  String
+  quantity    String
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  recipe      Recipe   @relation(fields: [recipeId], references: [id])
+  foodItem    FoodItem @relation(fields: [foodItemId], references: [id])
+
+  @@map("recipe_ingredients")
+}
+
+model DietPlanTemplate {
+  id          String   @id @default(cuid())
+  clinicId    String
+  name        String
+  description String?
+  category    String   // e.g., "weight-loss", "pitta-balancing"
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+
+  @@map("diet_plan_templates")
+}
+
+model DietPlanVersion {
+  id          String   @id @default(cuid())
+  dietPlanId  String
+  version     Int
+  changes     String   // JSON string with change description
+  changedBy   String   // user ID
+  createdAt   DateTime @default(now())
+
+  dietPlan    DietPlan @relation(fields: [dietPlanId], references: [id])
+
+  @@unique([dietPlanId, version])
+  @@map("diet_plan_versions")
+}
+
+model ProgressRecord {
+  id          String   @id @default(cuid())
+  patientId   String
+  date        DateTime
+  weight      Float?
+  waist       Float?
+  symptoms    String?  // JSON string with symptom scores
+  adherence   Int?     // 0-100 percentage
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  patient     Patient  @relation(fields: [patientId], references: [id])
+
+  @@map("progress_records")
+}
+
+// Enums
+enum UserRole {
+  SUPER_ADMIN
+  CLINIC_ADMIN
+  DIETITIAN
+  ASSISTANT
+  PATIENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum DoshaEffect {
+  PACIFIES
+  NEUTRAL
+  AGGRAVATES
+}
+
+enum Rasa {
+  SWEET
+  SOUR
+  SALTY
+  PUNGENT
+  BITTER
+  ASTRINGENT
+}
+
+enum Guna {
+  HEAVY
+  LIGHT
+  COLD
+  HOT
+  OILY
+  DRY
+  SMOOTH
+  ROUGH
+  SOFT
+  HARD
+  STABLE
+  MOBILE
+  GROSS
+  SUBTLE
+  CLOUDY
+  CLEAR
+  SLOW
+  SHARP
+}
+
+enum Virya {
+  HEATING
+  COOLING
+  NEUTRAL
+}
+
+enum Vipaka {
+  SWEET
+  SOUR
+  PUNGENT
+  ASTRINGENT
+  BITTER
+}
+
+enum PlanStatus {
+  DRAFT
+  APPROVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
